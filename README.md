@@ -1,2 +1,3 @@
-# count-page-views
-Count page views
+# count-page-views  
+This project is developed in PHP language.  
+@masoudiofficial
