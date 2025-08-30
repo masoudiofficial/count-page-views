@@ -41,11 +41,8 @@ if (isset($_POST['xstats']) && !empty($_POST['xstats']) && preg_match('/^[a-z]+$
     if (strtolower($_SERVER['HTTP_HOST']) === 'localhost' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (preg_match('/^[a-z0-9]+$/', $_POST['xreceiverstats']) && mb_strlen($_POST['xreceiverstats'], 'UTF-8') <= 32) {
 
-            $xday = DateTime::createFromFormat("Y-m-d H:i:s", xpersiandatetime());
-            $xday = $xday->format("d");
-
-            $xupdatestats = $xconnection->prepare("UPDATE statstable SET d" . $xday . "=d" . $xday . "+1 WHERE username IN (?, ?)");
-            $xupdatestats->execute(['mainaccount', $_POST['xreceiverstats']]);
+            $xpersiandatetime = xpersiandatetime();
+            $xday = DateTime::createFromFormat("Y-m-d H:i:s", $xpersiandatetime)->format("d");
 
             $target_col = 'd' . $xday;
             $columns = ['d01', 'd02', 'd03', 'd04', 'd05', 'd06', 'd07', 'd08', 'd09', 'd10', 'd11', 'd12', 'd13', 'd14', 'd15', 'd16', 'd17', 'd18', 'd19', 'd20', 'd21', 'd22', 'd23', 'd24', 'd25', 'd26', 'd27', 'd28', 'd29', 'd30', 'd31'];
@@ -67,14 +64,27 @@ if (isset($_POST['xstats']) && !empty($_POST['xstats']) && preg_match('/^[a-z]+$
 
             $sum_weekly = implode(' + ', $weekly);
             $sum_monthly = implode(' + ', $monthly);
-            $xselect = $xconnection->prepare("SELECT $target_col, ($sum_weekly) AS weekly, ($sum_monthly) AS monthly FROM statstable WHERE username=? LIMIT 1");
+            $xselect = $xconnection->prepare("SELECT datetime, $target_col, ($sum_weekly) AS weekly, ($sum_monthly) AS monthly FROM statstable WHERE username=? LIMIT 1");
             $xselect->execute([$_POST['xreceiverstats']]);
             $xselect = $xselect->fetch(PDO::FETCH_ASSOC);
 
-            $xconnection = null;
+            if (DateTime::createFromFormat("Y-m-d H:i:s", $xselect['datetime'])->format("d") === $xday) {
 
-            $xresponse = array("xdaily" => $xselect[$target_col], "xweekly" => $xselect['weekly'], "xmonthly" => $xselect['monthly']);
-            echo json_encode($xresponse);
+                $xupdatestats = $xconnection->prepare("UPDATE statstable SET d" . $xday . "=d" . $xday . "+1 WHERE username IN (?, ?)");
+                $xupdatestats->execute(['mainaccount', $_POST['xreceiverstats']]);
+
+                $xresponse = array("xdaily" => ($xselect[$target_col] + 1), "xweekly" => ($xselect['weekly'] + 1), "xmonthly" => ($xselect['monthly'] + 1));
+                echo json_encode($xresponse);
+            } else {
+
+                $xupdatestats = $xconnection->prepare("UPDATE statstable SET datetime=?, d" . $xday . "=1 WHERE username IN (?, ?)");
+                $xupdatestats->execute([$xpersiandatetime, 'mainaccount', $_POST['xreceiverstats']]);
+
+                $xresponse = array("xdaily" => 1, "xweekly" => ($xselect['weekly'] - $xselect[$target_col] + 1), "xmonthly" => ($xselect['monthly'] - $xselect[$target_col] + 1));
+                echo json_encode($xresponse);
+            }
+
+            $xconnection = null;
         }
     }
 }
