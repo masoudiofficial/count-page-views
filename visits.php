@@ -64,23 +64,34 @@ if (isset($_POST['xstats']) && !empty($_POST['xstats']) && preg_match('/^[a-z]+$
 
             $sum_weekly = implode(' + ', $weekly);
             $sum_monthly = implode(' + ', $monthly);
-            $xselect = $xconnection->prepare("SELECT datetime, $target_col, ($sum_weekly) AS weekly, ($sum_monthly) AS monthly FROM statstable WHERE username=? LIMIT 1");
-            $xselect->execute([$_POST['xreceiverstats']]);
-            $xselect = $xselect->fetch(PDO::FETCH_ASSOC);
+            $xselect = $xconnection->prepare("SELECT datetime, $target_col, ($sum_weekly) AS weekly, ($sum_monthly) AS monthly FROM statstable WHERE username IN (?, ?)");
+            $xselect->execute(['mainaccount', $_POST['xreceiverstats']]);
+            $xselect = $xselect->fetchAll(PDO::FETCH_ASSOC);
 
-            if (DateTime::createFromFormat("Y-m-d H:i:s", $xselect['datetime'])->format("d") === $xday) {
+            if ($_POST['xreceiverstats'] === 'mainaccount') {
+                $xselect[] = $xselect[0];
+            }
+
+            if (DateTime::createFromFormat("Y-m-d H:i:s", $xselect[1]['datetime'])->format("d") === $xday) {
 
                 $xupdatestats = $xconnection->prepare("UPDATE statstable SET d" . $xday . "=d" . $xday . "+1 WHERE username IN (?, ?)");
                 $xupdatestats->execute(['mainaccount', $_POST['xreceiverstats']]);
 
-                $xresponse = array("xdaily" => ($xselect[$target_col] + 1), "xweekly" => ($xselect['weekly'] + 1), "xmonthly" => ($xselect['monthly'] + 1));
+                $xresponse = array("xdaily" => ($xselect[1][$target_col] + 1), "xweekly" => ($xselect[1]['weekly'] + 1), "xmonthly" => ($xselect[1]['monthly'] + 1));
                 echo json_encode($xresponse);
             } else {
 
-                $xupdatestats = $xconnection->prepare("UPDATE statstable SET datetime=?, d" . $xday . "=1 WHERE username IN (?, ?)");
-                $xupdatestats->execute([$xpersiandatetime, 'mainaccount', $_POST['xreceiverstats']]);
+                if (DateTime::createFromFormat("Y-m-d H:i:s", $xselect[0]['datetime'])->format("d") !== $xday) {
+                    $xupdatestats = $xconnection->prepare("UPDATE statstable SET datetime=?, d" . $xday . "=1 WHERE username IN (?, ?)");
+                    $xupdatestats->execute([$xpersiandatetime, 'mainaccount', $_POST['xreceiverstats']]);
+                } else {
+                    $xupdatestats = $xconnection->prepare("UPDATE statstable SET datetime=?, d" . $xday . "=1 WHERE username=?");
+                    $xupdatestats->execute([$xpersiandatetime, $_POST['xreceiverstats']]);
+                    $xupdatestats = $xconnection->prepare("UPDATE statstable SET d" . $xday . "=d" . $xday . "+1 WHERE username=?");
+                    $xupdatestats->execute(['mainaccount']);
+                }
 
-                $xresponse = array("xdaily" => 1, "xweekly" => ($xselect['weekly'] - $xselect[$target_col] + 1), "xmonthly" => ($xselect['monthly'] - $xselect[$target_col] + 1));
+                $xresponse = array("xdaily" => 1, "xweekly" => ($xselect[1]['weekly'] - $xselect[1][$target_col] + 1), "xmonthly" => ($xselect[1]['monthly'] - $xselect[1][$target_col] + 1));
                 echo json_encode($xresponse);
             }
 
